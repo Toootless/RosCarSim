@@ -1,0 +1,3 @@
+"""
+Vehicle Visualization GUI package
+"""
