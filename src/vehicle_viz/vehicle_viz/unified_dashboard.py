@@ -16,7 +16,6 @@ from std_msgs.msg import Float32, String
 import PySimpleGUI as sg
 import json
 from datetime import datetime
-from pathlib import Path
 
 class UnifiedDashboardNode(Node):
     def __init__(self):
@@ -47,6 +46,7 @@ class UnifiedDashboardNode(Node):
         
         # Subscriptions
         self.state_sub = self.create_subscription(Twist, '/vehicle/state', self.state_callback, 10)
+        self.diag_sub = self.create_subscription(String, '/vehicle/diagnostics', self.diagnostics_callback, 10)
         self.adas_sub = self.create_subscription(String, '/adas/settings', self.adas_callback, 10)
         
         # Publishers
@@ -65,23 +65,42 @@ class UnifiedDashboardNode(Node):
         self.get_logger().info('Unified Dashboard initialized')
     
     def state_callback(self, msg):
+        """Update vehicle state from Twist message (position in angular fields)"""
         self.position_x = msg.angular.x
         self.position_y = msg.angular.y
         self.velocity = msg.linear.x
         self.heading = msg.angular.z
     
+    def diagnostics_callback(self, msg):
+        """Parse diagnostics string: x:50.0,y:0.0,speed:20.00,rpm:10000,gear:D"""
+        try:
+            parts = msg.data.split(',')
+            for part in parts:
+                key_val = part.strip().split(':')
+                if len(key_val) == 2:
+                    key, val = key_val
+                    if key == 'rpm':
+                        self.rpm = float(val)
+                    elif key == 'gear':
+                        self.current_gear = val.strip()
+        except Exception as e:
+            pass
+    
     def adas_callback(self, msg):
+        """Update ADAS settings from JSON message"""
         try:
             self.adas_settings.update(json.loads(msg.data))
         except:
             pass
     
     def publish_gear_timer(self):
+        """Publish gear selection every 50ms"""
         gear_msg = String()
         gear_msg.data = self.current_gear
         self.gear_pub.publish(gear_msg)
     
     def log_can_message(self):
+        """Log CAN message every 100ms"""
         msg = {
             'timestamp': datetime.now().strftime('%H:%M:%S.%f')[:-3],
             'gear': self.current_gear,
@@ -101,18 +120,38 @@ class UnifiedDashboardNode(Node):
         if self.is_recording:
             self.recorded_messages.append(msg)
     
+    def draw_vehicle(self):
+        """Create ASCII vehicle visualization based on state"""
+        # Simple box with wheels
+        gear_color_map = {'P': '#ffcc00', 'R': '#ff0000', 'N': '#0000ff', 'D': '#00cc00'}
+        gear_color = gear_color_map.get(self.current_gear, '#666666')
+        
+        # Create a simple visual representation
+        if self.velocity > 15:
+            vehicle_char = '▶'  # Moving forward
+        elif self.velocity < -5:
+            vehicle_char = '◀'  # Reversing
+        elif self.current_gear == 'R':
+            vehicle_char = '◀'
+        else:
+            vehicle_char = '█'  # Stationary
+        
+        return vehicle_char, gear_color
+    
     def run(self):
         sg.theme('Dark2')
         sg.set_options(font=('Arial', 12), element_padding=(5, 5))
         
+        vehicle_char, _ = self.draw_vehicle()
+        
         # Layout
         viz_column = [
             [sg.Text('Vehicle Status', font=('Arial', 14, 'bold'))],
-            [sg.Text('🚗', font=('Arial', 80))],
-            [sg.Text(f'Position: ({self.position_x:.2f}, {self.position_y:.2f})', key='pos_text')],
-            [sg.Text(f'Speed: {self.velocity:.1f} m/s', key='speed_text')],
-            [sg.Text(f'RPM: {self.rpm:.0f}', key='rpm_text')],
-            [sg.Text(f'Heading: {self.heading:.1f}°', key='heading_text')],
+            [sg.Multiline(size=(15, 8), key='vehicle_display', disabled=True, font=('Courier', 60))],
+            [sg.Text(f'Position: ({self.position_x:.1f}, {self.position_y:.1f})', key='pos_text', font=('Arial', 11))],
+            [sg.Text(f'Speed: {self.velocity:.1f} m/s', key='speed_text', font=('Arial', 11))],
+            [sg.Text(f'RPM: {self.rpm:.0f}', key='rpm_text', font=('Arial', 11))],
+            [sg.Text(f'Heading: {self.heading:.1f}°', key='heading_text', font=('Arial', 11))],
         ]
         
         control_column = [
@@ -120,24 +159,24 @@ class UnifiedDashboardNode(Node):
             [sg.Text('Steering:'), sg.Slider(range=(-100, 100), default_value=0, orientation='h', size=(20, 15), key='steering_slider')],
             [sg.Text('Throttle:'), sg.Slider(range=(0, 100), default_value=0, orientation='h', size=(20, 15), key='throttle_slider')],
             [sg.Text('Brake:'), sg.Slider(range=(0, 100), default_value=0, orientation='h', size=(20, 15), key='brake_slider')],
-            [sg.Button('P'), sg.Button('R'), sg.Button('N'), sg.Button('D')],
-            [sg.Text('Gear: P', key='gear_display')],
+            [sg.Button('P', size=(4, 1)), sg.Button('R', size=(4, 1)), sg.Button('N', size=(4, 1)), sg.Button('D', size=(4, 1))],
+            [sg.Text('Gear: P', key='gear_display', font=('Arial', 12, 'bold'))],
         ]
         
         adas_column = [
             [sg.Text('ADAS Options', font=('Arial', 14, 'bold'))],
-            [sg.Checkbox('ABS', key='abs_check'), sg.Text('', text_color='red', key='status_abs')],
-            [sg.Checkbox('Traction Control', key='traction_check'), sg.Text('', text_color='red', key='status_traction')],
-            [sg.Checkbox('Lane Centering', key='lane_check'), sg.Text('', text_color='red', key='status_lane')],
-            [sg.Checkbox('Adaptive Cruise', key='acc_check'), sg.Text('', text_color='red', key='status_acc')],
-            [sg.Checkbox('Backup Camera', key='backup_check'), sg.Text('', text_color='red', key='status_backup')],
+            [sg.Checkbox('ABS', key='abs_check'), sg.Text('🔴', text_color='red', key='status_abs')],
+            [sg.Checkbox('Traction Control', key='traction_check'), sg.Text('🔴', text_color='red', key='status_traction')],
+            [sg.Checkbox('Lane Centering', key='lane_check'), sg.Text('🔴', text_color='red', key='status_lane')],
+            [sg.Checkbox('Adaptive Cruise', key='acc_check'), sg.Text('🔴', text_color='red', key='status_acc')],
+            [sg.Checkbox('Backup Camera', key='backup_check'), sg.Text('🔴', text_color='red', key='status_backup')],
             [sg.Text('ACC Target Speed (km/h):'), sg.Slider(range=(20, 200), default_value=100, orientation='h', size=(15, 15), key='acc_speed_slider')],
         ]
         
         can_column = [
             [sg.Text('CAN Message Log', font=('Arial', 14, 'bold'))],
             [sg.Button('Record CAN', key='record_can'), sg.Button('Export CAN', key='export_can'), sg.Button('Clear Log', key='clear_log')],
-            [sg.Multiline(size=(80, 8), key='can_log', disabled=True)],
+            [sg.Multiline(size=(80, 8), key='can_log', disabled=True, font=('Courier', 9))],
         ]
         
         layout = [
@@ -155,8 +194,12 @@ class UnifiedDashboardNode(Node):
             if event == sg.WINDOW_CLOSED:
                 break
             
+            # Draw vehicle visualization
+            vehicle_char, _ = self.draw_vehicle()
+            window['vehicle_display'].update(f'\n\n  {vehicle_char}', text_color='cyan')
+            
             # Update display
-            window['pos_text'].update(f'Position: ({self.position_x:.2f}, {self.position_y:.2f})')
+            window['pos_text'].update(f'Position: ({self.position_x:.1f}, {self.position_y:.1f})')
             window['speed_text'].update(f'Speed: {self.velocity:.1f} m/s')
             window['rpm_text'].update(f'RPM: {self.rpm:.0f}')
             window['heading_text'].update(f'Heading: {self.heading:.1f}°')
@@ -213,18 +256,18 @@ class UnifiedDashboardNode(Node):
             if event == 'clear_log':
                 self.can_messages.clear()
             
-            # ADAS status display
+            # ADAS status display with colors
             abs_color = 'green' if self.adas_settings.get('abs_enabled') else 'red'
             traction_color = 'green' if self.adas_settings.get('traction_control') else 'red'
             lane_color = 'green' if self.adas_settings.get('lane_centering') else 'red'
             acc_color = 'green' if self.adas_settings.get('adaptive_cruise') else 'red'
             backup_color = 'green' if (self.adas_settings.get('backup_camera') and self.current_gear == 'R') else 'red'
             
-            window['status_abs'].update(('🟢' if abs_color == 'green' else '🔴') + ' ABS', text_color=abs_color)
-            window['status_traction'].update(('🟢' if traction_color == 'green' else '🔴') + ' Traction', text_color=traction_color)
-            window['status_lane'].update(('🟢' if lane_color == 'green' else '🔴') + ' Lane Ctr', text_color=lane_color)
-            window['status_acc'].update(('🟢' if acc_color == 'green' else '🔴') + ' ACC', text_color=acc_color)
-            window['status_backup'].update(('🟢' if backup_color == 'green' else '🔴') + ' Backup Cam', text_color=backup_color)
+            window['status_abs'].update(('🟢' if abs_color == 'green' else '🔴'), text_color=abs_color)
+            window['status_traction'].update(('🟢' if traction_color == 'green' else '🔴'), text_color=traction_color)
+            window['status_lane'].update(('🟢' if lane_color == 'green' else '🔴'), text_color=lane_color)
+            window['status_acc'].update(('🟢' if acc_color == 'green' else '🔴'), text_color=acc_color)
+            window['status_backup'].update(('🟢' if backup_color == 'green' else '🔴'), text_color=backup_color)
             
             # CAN log display
             if self.can_messages:
