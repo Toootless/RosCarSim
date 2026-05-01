@@ -57,11 +57,9 @@ class OptionsPanelNode(Node):
         
         layout = [
             [sg.Text('VEHICLE OPTIONS', font=('Arial', 16, 'bold'))],
-            [sg.Separator()],
             [sg.Text('SAFETY SYSTEMS', font=('Arial', 12, 'bold'))],
             [sg.Checkbox('ABS (Anti-Lock Braking)', default=False, key='abs', enable_events=True)],
             [sg.Checkbox('Traction Control', default=False, key='traction', enable_events=True)],
-            [sg.Separator()],
             [sg.Text('ADAS FEATURES', font=('Arial', 12, 'bold'))],
             [sg.Checkbox('Lane Centering Assist', default=False, key='lane_center', enable_events=True)],
             [sg.Checkbox('Adaptive Cruise Control', default=False, key='acc', enable_events=True)],
@@ -69,10 +67,8 @@ class OptionsPanelNode(Node):
              sg.Slider(range=(0, 200), default_value=60, size=(20, 15),
                        orientation='h', key='acc_speed', disabled=True, enable_events=True)],
             [sg.Checkbox('Backup Camera', default=False, key='backup_camera', enable_events=True)],
-            [sg.Separator()],
             [sg.Text('ACTIVE SYSTEMS:', font=('Arial', 12, 'bold'))],
             [sg.Multiline(size=(40, 6), key='status_display', disabled=True)],
-            [sg.Separator()],
             [sg.Button('Quit')],
         ]
         

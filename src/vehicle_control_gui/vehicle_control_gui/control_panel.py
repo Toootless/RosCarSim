@@ -47,12 +47,10 @@ class ControlPanelNode(Node):
         
         layout = [
             [sg.Text('VEHICLE CONTROL PANEL', font=('Arial', 16, 'bold'))],
-            [sg.Separator()],
             [sg.Text('Steering Wheel (degrees):', font=('Arial', 12, 'bold'))],
             [sg.Slider(range=(-30, 30), default_value=0, size=(30, 15), 
                        orientation='h', key='steering', enable_events=True)],
             [sg.Text('Steering: 0°', key='steering_display', size=(20, 1))],
-            [sg.Separator()],
             [sg.Text('Gas Pedal (%)', font=('Arial', 12, 'bold')),
              sg.Text('Brake Pedal (%)', font=('Arial', 12, 'bold'))],
             [sg.Slider(range=(0, 100), default_value=0, size=(15, 15),
@@ -61,12 +59,10 @@ class ControlPanelNode(Node):
                        orientation='v', key='brake', enable_events=True)],
             [sg.Text('0%', key='throttle_display', size=(8, 1)),
              sg.Text('0%', key='brake_display', size=(8, 1))],
-            [sg.Separator()],
             [sg.Text('Transmission:', font=('Arial', 12, 'bold'))],
             [sg.Button('P'), sg.Button('R'), sg.Button('N'), 
              sg.Button('D'), sg.Button('L')],
             [sg.Text('Current: P', key='gear_display', size=(15, 1))],
-            [sg.Separator()],
             [sg.Button('Quit')],
         ]
         
